@@ -1,3 +1,28 @@
+class WithTokens < Devise::Strategies::Base
+  def valid?
+    found_header = request.headers["Authorization"]
+    if found_header && found_header.start_with?("bearer ")
+      Rails.logger.debug "Should use token header to auth for '#{found_header}'"
+      true
+    else
+      Rails.logger.debug "Not using token header to auth"
+      false
+    end
+  end
+
+  def authenticate!
+    full_header = request.headers["Authorization"]
+    token = full_header.split(" ")[1] # "bearer <actual_token_here>"
+    user = User.find_by api_token: token
+    if user
+      Rails.logger.debug "Found #{user.email} with token #{token}"
+      success! user
+    else
+      Rails.logger.debug "Got bad token #{token}"
+      fail! "Could not log in"
+    end
+  end
+end
 # Use this hook to configure devise mailer, warden hooks and so forth.
 # Many of these configuration options can be set straight in your model.
 Devise.setup do |config|
@@ -241,10 +266,11 @@ Devise.setup do |config|
   # If you want to use other strategies, that are not supported by Devise, or
   # change the failure app, you can configure them inside the config.warden block.
   #
-  # config.warden do |manager|
+  config.warden do |manager|
   #   manager.intercept_401 = false
-  #   manager.default_strategies(scope: :user).unshift :some_external_strategy
-  # end
+    manager.strategies.add(:with_token, WithTokens)
+    manager.default_strategies(scope: :user).unshift :with_token
+  end
 
   # ==> Mountable engine configurations
   # When using Devise inside an engine, let's call it `MyEngine`, and this engine
